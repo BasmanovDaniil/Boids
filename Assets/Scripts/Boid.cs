@@ -2,69 +2,97 @@ using UnityEngine;
 
 public class Boid : MonoBehaviour
 {
-    public Vector3 velocity;
+    public int turnSpeed = 10;
+    public int maxSpeed = 15;
+    public float cohesionRadius = 7;
+    public int maxBoids = 10;
+    public float separationDistance = 5;
+    public float cohesionCoefficient = 1;
+    public float alignmentCoefficient = 4;
+    public float separationCoefficient = 10;
+    public float tick = 2;
+    public Transform model;
+    public LayerMask boidsLayer;
 
-    private float cohesionRadius = 10;
-    private float separationDistance = 5;
+    [HideInInspector] public Vector3 velocity;
+    [HideInInspector] public Transform tr;
+
     private Collider[] boids;
     private Vector3 cohesion;
     private Vector3 separation;
     private int separationCount;
     private Vector3 alignment;
-    private float maxSpeed = 15;
+
+    private Boid b;
+    private Vector3 vector;
+    private int i;
+
+    void Awake()
+    {
+        tr = transform;
+        velocity = Random.onUnitSphere*maxSpeed;
+    }
 
     private void Start()
     {
-        InvokeRepeating("CalculateVelocity", 0, 0.1f);
+        InvokeRepeating("CalculateVelocity", Random.value * tick, tick);
+        InvokeRepeating("UpdateRotation", Random.value, 0.1f);
     }
 
     void CalculateVelocity()
     {
+        boids = Physics.OverlapSphere(tr.position, cohesionRadius, boidsLayer.value);
+        if (boids.Length < 2) return;
+
         velocity = Vector3.zero;
         cohesion = Vector3.zero;
         separation = Vector3.zero;
         separationCount = 0;
         alignment = Vector3.zero;
-
-        boids = Physics.OverlapSphere(transform.position, cohesionRadius);
-        foreach (var boid in boids)
+        
+        for (i = 0; i < boids.Length && i < maxBoids; i++)
         {
-            cohesion += boid.transform.position;
-            alignment += boid.GetComponent<Boid>().velocity;
-
-            if (boid != collider && (transform.position - boid.transform.position).magnitude < separationDistance)
+            b = boids[i].GetComponent<Boid>();
+            cohesion += b.tr.position;
+            alignment += b.velocity;
+            vector = tr.position - b.tr.position;
+            if (vector.sqrMagnitude > 0 && vector.sqrMagnitude < separationDistance * separationDistance)
             {
-                separation += (transform.position - boid.transform.position) / (transform.position - boid.transform.position).magnitude;
+                separation += vector / vector.sqrMagnitude;
                 separationCount++;
             }
         }
 
-        cohesion = cohesion / boids.Length;
-        cohesion = cohesion - transform.position;
-        cohesion = Vector3.ClampMagnitude(cohesion, maxSpeed);
+        cohesion = cohesion / (boids.Length > maxBoids ? maxBoids : boids.Length);
+        cohesion = Vector3.ClampMagnitude(cohesion - tr.position, maxSpeed);
+        cohesion *= cohesionCoefficient;
         if (separationCount > 0)
         {
             separation = separation / separationCount;
             separation = Vector3.ClampMagnitude(separation, maxSpeed);
+            separation *= separationCoefficient;
         }
-        alignment = alignment / boids.Length;
+        alignment = alignment / (boids.Length > maxBoids ? maxBoids : boids.Length);
         alignment = Vector3.ClampMagnitude(alignment, maxSpeed);
+        alignment *= alignmentCoefficient;
 
-        velocity += cohesion + separation * 10 + alignment * 1.5f;
-        velocity = Vector3.ClampMagnitude(velocity, maxSpeed);
+        velocity = Vector3.ClampMagnitude(cohesion + separation + alignment, maxSpeed);
+    }
+
+    void UpdateRotation()
+    {
+        if (velocity != Vector3.zero && model.forward != velocity.normalized)
+        {
+            model.forward = Vector3.RotateTowards(model.forward, velocity, turnSpeed, 1);
+        }
     }
 
     void Update()
     {
-        if (transform.position.magnitude > 25)
+        if (tr.position.sqrMagnitude > 25 * 25)
         {
-            velocity += -transform.position.normalized;
+            velocity += -tr.position / 25;
         }
-
-        transform.position += velocity * Time.deltaTime;
-
-        Debug.DrawRay(transform.position, separation, Color.green);
-        Debug.DrawRay(transform.position, cohesion, Color.magenta);
-        Debug.DrawRay(transform.position, alignment, Color.blue);
+        tr.position += velocity * Time.deltaTime;
     }
 }

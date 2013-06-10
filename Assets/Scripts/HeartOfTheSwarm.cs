@@ -10,7 +10,8 @@ public class HeartOfTheSwarm : MonoBehaviour
 	{
         for (var i = 0; i < swarmCount; i++)
         {
-            Instantiate(boidPrefab, Random.insideUnitSphere * 25, Quaternion.identity);
+            var boid = Instantiate(boidPrefab, Random.insideUnitSphere * 25, Quaternion.identity) as Transform;
+            boid.parent = transform;
         }
     }
 }
