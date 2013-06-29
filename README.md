@@ -1,4 +1,4 @@
-Реализация модели Boids на Unity3D
+Реализация модели Boids на Unity3d
 
 http://habrahabr.ru/post/182382/
 
