@@ -1,98 +1,149 @@
 using UnityEngine;
+using System.Collections;
+using System.Collections.Generic;
 
-public class Boid : MonoBehaviour
+public class Boid
 {
-    public int turnSpeed = 10;
-    public int maxSpeed = 15;
-    public float cohesionRadius = 7;
-    public int maxBoids = 10;
-    public float separationDistance = 5;
-    public float cohesionCoefficient = 1;
-    public float alignmentCoefficient = 4;
-    public float separationCoefficient = 10;
-    public float tick = 2;
-    public Transform model;
-    public LayerMask boidsLayer;
+    public Vector3 velocity;
+    public Vector3 position;
 
-    [HideInInspector] public Vector3 velocity;
-    [HideInInspector] public Transform tr;
-
-    private Collider[] boids;
+    
+    private Boid[] boids;
     private Vector3 cohesion;
     private Vector3 separation;
     private int separationCount;
     private Vector3 alignment;
 
-    private Boid b;
-    private Vector3 vector;
-    private int i;
-
-    void Awake()
+    public Boid(Vector3 pos)
     {
-        tr = transform;
-        velocity = Random.onUnitSphere*maxSpeed;
+        position = pos;
     }
-
-    private void Start()
+    public void CalculateVelocity()
     {
-        InvokeRepeating("CalculateVelocity", Random.value * tick, tick);
-        InvokeRepeating("UpdateRotation", Random.value, 0.1f);
-    }
-
-    void CalculateVelocity()
-    {
-        boids = Physics.OverlapSphere(tr.position, cohesionRadius, boidsLayer.value);
-        if (boids.Length < 2) return;
-
-        velocity = Vector3.zero;
+        Vector3 newVelocity = Vector3.zero;
         cohesion = Vector3.zero;
         separation = Vector3.zero;
         separationCount = 0;
         alignment = Vector3.zero;
-        
-        for (i = 0; i < boids.Length && i < maxBoids; i++)
+        boids = Boids.Sphere(position, Boids.cohesionRadius);
+        foreach (Boid boid in boids)
         {
-            b = boids[i].GetComponent<Boid>();
-            cohesion += b.tr.position;
-            alignment += b.velocity;
-            vector = tr.position - b.tr.position;
-            if (vector.sqrMagnitude > 0 && vector.sqrMagnitude < separationDistance * separationDistance)
+            alignment += boid.velocity;
+            cohesion += boid.position;
+            if (boid != this && (position - boid.position).magnitude < Boids.separationDistance)
             {
-                separation += vector / vector.sqrMagnitude;
+                separation += (position - boid.position) / (position - boid.position).magnitude;
                 separationCount++;
             }
         }
+        cohesion = cohesion / boids.Length;
+        cohesion = cohesion - position;
+        cohesion = Vector3.ClampMagnitude(cohesion, Boids.maxSpeed);
 
-        cohesion = cohesion / (boids.Length > maxBoids ? maxBoids : boids.Length);
-        cohesion = Vector3.ClampMagnitude(cohesion - tr.position, maxSpeed);
-        cohesion *= cohesionCoefficient;
         if (separationCount > 0)
-        {
             separation = separation / separationCount;
-            separation = Vector3.ClampMagnitude(separation, maxSpeed);
-            separation *= separationCoefficient;
-        }
-        alignment = alignment / (boids.Length > maxBoids ? maxBoids : boids.Length);
-        alignment = Vector3.ClampMagnitude(alignment, maxSpeed);
-        alignment *= alignmentCoefficient;
+        separation = Vector3.ClampMagnitude(separation, Boids.maxSpeed);
 
-        velocity = Vector3.ClampMagnitude(cohesion + separation + alignment, maxSpeed);
-    }
-
-    void UpdateRotation()
-    {
-        if (velocity != Vector3.zero && model.forward != velocity.normalized)
+        alignment = alignment / boids.Length;
+        alignment = Vector3.ClampMagnitude(alignment, Boids.maxSpeed);
+        newVelocity += cohesion * 0.5f + separation * 15f + alignment * 1.5f;
+        //newVelocity += 
+        //    cohesion * Boids.cohesion + separation * Boids.separation + alignment * Boids.alignment;
+        
+        newVelocity = Vector3.ClampMagnitude(newVelocity, Boids.maxSpeed);
+        velocity = (velocity * 2f + newVelocity) / 3f;
+        if (position.magnitude > Boids.MaxDistance)
         {
-            model.forward = Vector3.RotateTowards(model.forward, velocity, turnSpeed, 1);
+            velocity += -position.normalized * 4f;
         }
     }
-
-    void Update()
+    
+    public void Update()
     {
-        if (tr.position.sqrMagnitude > 25 * 25)
+        position += velocity * Time.deltaTime;
+        /**
+        Debug.DrawRay(position, separation, Color.green);
+        Debug.DrawRay(position, cohesion, Color.magenta);
+        Debug.DrawRay(position, alignment, Color.blue);
+        **/
+    }
+    
+}
+public class Boids : MonoBehaviour {
+
+    GameObject[] boidsObjects;
+    public int Count = 2500;
+    public GameObject prefab;
+    public static int MaxDistance = 50;
+    public static float cohesionRadius = 10;
+    public static float separationDistance = 5;
+    public static float maxSpeed = 15;
+
+    // Use this for initialization
+	void Start () {
+        boidsObjects = new GameObject[Count];
+        boids = new Boid[boidsObjects.Length];
+        for (int i = 0; i < boids.Length; i++)
         {
-            velocity += -tr.position / 25;
+            GameObject boid = (GameObject)GameObject.Instantiate(prefab);
+            boid.transform.position = Random.insideUnitSphere * (float)MaxDistance;
+            boidsObjects[i] = boid;
+            boids[i] = new Boid(boid.transform.position);
         }
-        tr.position += velocity * Time.deltaTime;
+        StartCoroutine(UpdatePhis());
+	}
+    float fps = 0f;
+    void OnGUI()
+    {
+        GUILayout.BeginVertical(GUILayout.Width(Screen.width));
+        GUILayout.Box("FPS: " + fps.ToString("F2"));
+        GUILayout.EndVertical();
+    }
+    IEnumerator UpdatePhis()
+    {
+        while (true)
+        {
+            int UpdateCount = 0;
+            for (int i = 0; i < boids.Length; i++)
+            {
+                boids[i].CalculateVelocity();
+                UpdateCount++;
+                if (UpdateCount > 100)
+                //if (UpdateCount > 20)
+                {
+                    yield return null;
+                    UpdateCount = 0;
+                }
+            }
+        }
+    }
+	// Update is called once per frame
+	void Update () {
+        fps = (fps * 2f + 1f / Time.deltaTime) / 3f;
+        Quaternion look;
+        for (int i = 0; i < boids.Length; i++)
+        {
+            boids[i].Update();
+            if (boids[i].velocity != Vector3.zero)
+            {
+                look = Quaternion.LookRotation(boids[i].velocity);
+                boidsObjects[i].transform.rotation = Quaternion.Lerp(boidsObjects[i].transform.rotation,
+                    look, Time.deltaTime * 2f);
+            }
+            boidsObjects[i].transform.position = boids[i].position;
+        }
+	}
+
+    public static Boid[] boids;
+    static public Boid[] Sphere(Vector3 position, float radius)
+    {
+        List<Boid> mids = new List<Boid>();
+        for (int i = 0; i < boids.Length; i++)
+        {
+            if (Vector3.Distance(position, boids[i].position) < radius)
+                mids.Add(boids[i]);
+        }
+        return mids.ToArray();
     }
 }
+
