@@ -2,6 +2,7 @@ using UnityEngine;
 
 public class Boid : MonoBehaviour
 {
+    public Vector3 anchor;
     public int turnSpeed = 10;
     public int maxSpeed = 15;
     public float cohesionRadius = 7;
@@ -89,9 +90,9 @@ public class Boid : MonoBehaviour
 
     void Update()
     {
-        if (tr.position.sqrMagnitude > 25 * 25)
+        if (Vector3.Distance(tr.position, anchor) > 25)
         {
-            velocity += -tr.position / 25;
+           velocity += (anchor - tr.position) / 25;
         }
         tr.position += velocity * Time.deltaTime;
     }
